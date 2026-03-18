@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hlasovací Systém — Databáza</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #08090f;
+    --surface:   #0e101a;
+    --card:      #13162200;
+    --card-solid:#131622;
+    --border:    #1e2235;
+    --accent:    #4f86f7;
+    --accent2:   #8250f0;
+    --success:   #52c41a;
+    --danger:    #dc3232;
+    --warn:      #faad14;
+    --text:      #dce0ff;
+    --sub:       #6e76a0;
+    --mono:      'Space Mono', monospace;
+    --sans:      'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  /* ── GRID BACKGROUND ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,134,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,134,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 40px 48px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .logo-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .logo-dots span {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: block;
+  }
+  .logo-dots span:nth-child(1) { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  .logo-dots span:nth-child(2) { background: var(--accent2); box-shadow: 0 0 12px var(--accent2); }
+
+  .logo-text {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--sub);
+  }
+
+  .header-title {
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 60%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .stat-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sub);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .stat-pill strong { color: var(--text); }
+
+  /* ── ACCENT LINE ── */
+  .accent-line {
+    height: 2px;
+    margin: 24px 48px 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), transparent);
+    position: relative;
+    z-index: 10;
+  }
+
+  /* ── CONTROLS ── */
+  .controls {
+    position: relative;
+    z-index: 10;
+    padding: 28px 48px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 24px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--sub);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.04em;
+  }
+  .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+  .tab-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(79,134,247,0.35);
+  }
+
+  .divider { width: 1px; height: 32px; background: var(--border); }
+
+  .count-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--sub);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .count-btn:hover { border-color: var(--accent); color: var(--text); }
+  .count-btn.active {
+    background: rgba(79,134,247,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .spacer { flex: 1; }
+
+  .refresh-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .refresh-btn:hover { border-color: var(--accent); }
+  .refresh-btn svg { transition: transform 0.4s; }
+  .refresh-btn.spinning svg { animation: spin 0.5s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── SEARCH ── */
+  .search-row {
+    position: relative;
+    z-index: 10;
+    padding: 16px 48px 0;
+  }
+  .search-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px 10px 44px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--sub); }
+  .search-icon {
+    position: absolute;
+    left: 64px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--sub);
+    pointer-events: none;
+  }
+
+  /* ── TABLE / CARD AREA ── */
+  .table-area {
+    position: relative;
+    z-index: 10;
+    padding: 20px 48px 48px;
+  }
+
+  /* ── COLUMN HEADERS ── */
+  .col-header {
+    display: grid;
+    padding: 0 12px 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--sub);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .col-header.logins-header {
+    grid-template-columns: 40px 180px 120px 1fr 200px;
+    gap: 12px;
+  }
+  .col-header.results-header {
+    grid-template-columns: 56px 120px 240px 1fr 160px 200px;
+    gap: 12px;
+  }
+
+  /* ── ROW ── */
+  .row {
+    display: grid;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px;
+    height: 52px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    cursor: default;
+    transition: background 0.1s;
+    animation: rowIn 0.3s ease both;
+    border: 1px solid transparent;
+  }
+  .row:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .row:hover {
+    background: rgba(79,134,247,0.07);
+    border-color: rgba(79,134,247,0.15);
+  }
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .row.logins-row  { grid-template-columns: 40px 180px 120px 1fr 200px; }
+  .row.results-row { grid-template-columns: 56px 120px 240px 1fr 160px 200px; cursor: pointer; }
+
+  /* ── CELL TYPES ── */
+  .cell-idx {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sub);
+  }
+
+  .cell-username {
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .badge-party {
+    background: rgba(130,80,240,0.18);
+    border: 1px solid rgba(130,80,240,0.4);
+    color: #c4a0ff;
+  }
+  .badge-approved {
+    background: rgba(82,196,26,0.14);
+    border: 1px solid rgba(82,196,26,0.4);
+    color: var(--success);
+  }
+  .badge-rejected {
+    background: rgba(220,50,50,0.14);
+    border: 1px solid rgba(220,50,50,0.4);
+    color: var(--danger);
+  }
+
+  .cell-topic {
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cell-topic.no-topic { color: var(--sub); font-style: italic; }
+
+  .cell-votes {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sub);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .vote-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .vote-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-for     { background: var(--success); }
+  .dot-against { background: var(--danger); }
+  .dot-abstain { background: var(--warn); }
+  .dot-non     { background: var(--accent); }
+
+  .cell-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sub);
+    text-align: right;
+  }
+
+  .cell-count-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sub);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* ── EMPTY / LOADING STATES ── */
+  .state-msg {
+    text-align: center;
+    padding: 60px 0;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--sub);
+    animation: fadeIn 0.4s ease;
+  }
+  .state-msg .big { font-size: 36px; display: block; margin-bottom: 12px; opacity: 0.3; }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+  .loading-dots span {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin: 0 3px;
+    animation: bounce 1.2s ease-in-out infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── DETAIL MODAL ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 540px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(12px) scale(0.98);
+    transition: transform 0.2s;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+  .modal-overlay.open .modal { transform: none; }
+
+  .modal-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .modal-accent {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), transparent);
+  }
+  .modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .modal-topic {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .modal-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: rgba(220,50,50,0.15);
+    border: 1px solid rgba(220,50,50,0.3);
+    border-radius: 6px;
+    width: 28px; height: 28px;
+    color: var(--danger);
+    font-size: 12px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    transition: background 0.1s;
+  }
+  .modal-close:hover { background: rgba(220,50,50,0.3); }
+
+  .modal-stats {
+    padding: 14px 24px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.015);
+  }
+  .stat-item { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; }
+  .stat-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .modal-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 12px 24px 20px;
+  }
+  .modal-body::-webkit-scrollbar { width: 4px; }
+  .modal-body::-webkit-scrollbar-track { background: transparent; }
+  .modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .party-col-header {
+    display: grid;
+    grid-template-columns: 1fr 150px;
+    gap: 12px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sub);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+
+  .party-row {
+    display: grid;
+    grid-template-columns: 1fr 150px;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-bottom: 3px;
+    border-left: 2px solid transparent;
+    transition: background 0.1s;
+  }
+  .party-row:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .party-row:hover { background: rgba(79,134,247,0.06); }
+
+  .party-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .vote-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid;
+  }
+  .vote-Za         { color: var(--success); border-color: rgba(82,196,26,0.4);   background: rgba(82,196,26,0.12); }
+  .vote-Proti      { color: var(--danger);  border-color: rgba(220,50,50,0.4);   background: rgba(220,50,50,0.12); }
+  .vote-Zdrzal     { color: var(--warn);    border-color: rgba(250,173,20,0.4);  background: rgba(250,173,20,0.12); }
+  .vote-Nehlasoval { color: var(--accent);  border-color: rgba(79,134,247,0.4);  background: rgba(79,134,247,0.12); }
+  .vote-Neprihlaseny { color: var(--sub);   border-color: var(--border);         background: rgba(255,255,255,0.04); }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--card-solid);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(.34,1.56,.64,1);
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── NOTICE BANNER ── */
+  .notice {
+    position: relative;
+    z-index: 10;
+    margin: 20px 48px 0;
+    padding: 14px 20px;
+    background: rgba(79,134,247,0.07);
+    border: 1px solid rgba(79,134,247,0.2);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--sub);
+    line-height: 1.6;
+  }
+  .notice strong { color: var(--accent); }
+
+  /* ── RESULT MODAL HEADER ── */
+  .modal-result-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    header, .accent-line, .controls, .search-row, .table-area, .notice {
+      padding-left: 20px; padding-right: 20px;
+    }
+    .col-header.logins-header,
+    .row.logins-row {
+      grid-template-columns: 36px 1fr 100px 1fr;
+    }
+    .col-header.logins-header > *:nth-child(4),
+    .row.logins-row > *:nth-child(4) { display: none; }
+    .col-header.results-header,
+    .row.results-row {
+      grid-template-columns: 46px 110px 1fr 130px;
+    }
+    .col-header.results-header > *:nth-child(4),
+    .row.results-row > *:nth-child(4),
+    .col-header.results-header > *:nth-child(5),
+    .row.results-row > *:nth-child(5) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-group">
+    <div class="logo-dots"><span></span><span></span></div>
+    <span class="logo-text">DHS Databáza</span>
+  </div>
+  <h1 class="header-title">Hlasovací Systém</h1>
+  <div class="header-right">
+    <div class="stat-pill" id="statPill">
+      <span>Prihlásenia:</span><strong id="statLogins">—</strong>
+      <span style="color:var(--border)">|</span>
+      <span>Hlasovanie:</span><strong id="statResults">—</strong>
+    </div>
+  </div>
+</header>
+
+<div class="accent-line"></div>
+
+<!-- NOTICE -->
+<div class="notice">
+  <strong>⚙️ Nastavenie</strong> — Nastavte
+  <code style="background:rgba(79,134,247,0.15);padding:1px 6px;border-radius:4px;color:var(--accent)">WORKER_URL</code>
+  v skripte na URL vášho Cloudflare Workera. Pozrite si <strong>SETUP-GUIDE.md</strong> pre kompletný návod.
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <button class="tab-btn active" id="tabLogins"  onclick="switchTab('logins')">Prihlásenia</button>
+  <button class="tab-btn"        id="tabResults" onclick="switchTab('results')">Hlasovanie</button>
+  <div class="divider"></div>
+  <span style="font-family:var(--mono);font-size:11px;color:var(--sub);">Posledných:</span>
+  <button class="count-btn" data-n="20"  onclick="setCount(20)">20</button>
+  <button class="count-btn active" data-n="50" onclick="setCount(50)">50</button>
+  <button class="count-btn" data-n="100" onclick="setCount(100)">100</button>
+  <button class="count-btn" data-n="200" onclick="setCount(200)">200</button>
+  <div class="spacer"></div>
+  <button class="refresh-btn" id="refreshBtn" onclick="refresh()">
+    <svg id="refreshIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg>
+    Obnoviť
+  </button>
+</div>
+
+<!-- SEARCH -->
+<div class="search-row" style="position:relative;">
+  <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </svg>
+  <input class="search-input" id="searchInput" placeholder="Hľadať…" oninput="onSearch()">
+</div>
+
+<!-- TABLE -->
+<div class="table-area">
+  <div id="colHeader"></div>
+  <div id="tableBody"></div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="detailModal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Detail hlasovania</div>
+      <div class="modal-topic" id="modalTopic"></div>
+      <div class="modal-result-row" id="modalResultRow"></div>
+      <div class="modal-accent"></div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-stats" id="modalStats"></div>
+    <div class="modal-body">
+      <div class="party-col-header">
+        <span>Poslanec / Strana</span>
+        <span>Hlas</span>
+      </div>
+      <div id="partyList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// CONFIG - paste your deployed Worker URL here
+const WORKER_URL = "https://dhs.magistrat-sr-bratislavy.workers.dev";
+
+// STATE
+let currentTab   = 'logins';
+let currentCount = 50;
+let allData      = [];
+let filteredData = [];
+let isLoading    = false;
+
+// LOAD - calls Cloudflare Worker
+async function loadData(){
+  const res = await fetch(`${WORKER_URL}?type=${currentTab}&count=${currentCount}`);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if(!json.success) throw new Error(json.error || 'Unknown error');
+  return json.entries || [];
+}
+
+async function loadStats(){
+  const res = await fetch(`${WORKER_URL}?type=stats`);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if(!json.success) throw new Error(json.error || 'Unknown error');
+  return { loginTotal: json.loginTotal ?? 0, resultTotal: json.resultTotal ?? 0 };
+}
+
+// RENDER
+function renderHeader(){
+  const h=document.getElementById('colHeader');
+  if(currentTab==='logins'){
+    h.className='col-header logins-header';
+    h.innerHTML=`<span>#</span><span>Používateľ</span><span>Strana</span><span></span><span style="text-align:right">Čas</span>`;
+  } else {
+    h.className='col-header results-header';
+    h.innerHTML=`<span>Č.</span><span>Výsledok</span><span>Téma</span><span>Hlasy</span><span>Strany</span><span style="text-align:right">Čas</span>`;
+  }
+}
+
+function renderRows(data){
+  const body=document.getElementById('tableBody');
+  if(!data||data.length===0){
+    body.innerHTML=`<div class="state-msg"><span class="big">📭</span>Žiadne záznamy.</div>`;
+    return;
+  }
+
+  body.innerHTML = data.map((e,i)=>{
+    if(currentTab==='logins'){
+      return `
+        <div class="row logins-row" style="animation-delay:${i*18}ms">
+          <span class="cell-idx">${i+1}</span>
+          <span class="cell-username">${esc(e.username||'?')}</span>
+          <span><span class="badge badge-party">${esc(e.party||'?')}</span></span>
+          <span></span>
+          <span class="cell-time">${esc(e.timestamp||'?')}</span>
+        </div>`;
+    } else {
+      const ok=e.approved;
+      const vBadge=ok
+        ?`<span class="badge badge-approved">PRIJATÝ</span>`
+        :`<span class="badge badge-rejected">ZAMIETNUTÝ</span>`;
+      const topic=e.topic&&e.topic!==''?e.topic:'(bez témy)';
+      const topicClass=topic==='(bez témy)'?'cell-topic no-topic':'cell-topic';
+      const votes=`
+        <div class="cell-votes">
+          <span class="vote-chip"><span class="vote-dot dot-for"></span>${e.forVotes??0}</span>
+          <span class="vote-chip"><span class="vote-dot dot-against"></span>${e.againstVotes??0}</span>
+          <span class="vote-chip"><span class="vote-dot dot-abstain"></span>${e.abstainVotes??0}</span>
+          <span class="vote-chip"><span class="vote-dot dot-non"></span>${e.nonVotedCount??0}</span>
+        </div>`;
+      const ps=e.loggedInParties&&e.loggedInParties.length?e.loggedInParties.length+' strán':'—';
+      return `
+        <div class="row results-row" style="animation-delay:${i*18}ms" onclick="showDetail(${i})">
+          <span class="cell-count-badge">č.${e.votingCount??'?'}</span>
+          ${vBadge}
+          <span class="${topicClass}" title="${esc(topic)}">${esc(topic)}</span>
+          ${votes}
+          <span style="font-family:var(--mono);font-size:11px;color:var(--sub)">${ps}</span>
+          <span class="cell-time">${esc(e.timestamp||'?')}</span>
+        </div>`;
+    }
+  }).join('');
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+async function refresh(){
+  if(isLoading) return;
+  isLoading=true;
+  const btn=document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+
+  document.getElementById('tableBody').innerHTML=
+    `<div class="state-msg"><div class="loading-dots"><span></span><span></span><span></span></div><div style="margin-top:14px">Načítavam...</div></div>`;
+
+  try {
+    const [data, stats] = await Promise.all([loadData(), loadStats()]);
+    allData = data;
+    applyFilter();
+    document.getElementById('statLogins').textContent  = stats.loginTotal;
+    document.getElementById('statResults').textContent = stats.resultTotal;
+    showToast('Dáta obnovené ✓');
+  } catch(e) {
+    document.getElementById('tableBody').innerHTML=
+      `<div class="state-msg"><span class="big">⚠️</span>Chyba pri načítaní dát.</div>`;
+  }
+
+  btn.classList.remove('spinning');
+  isLoading=false;
+}
+
+function applyFilter(){
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  if(!q){ filteredData=allData; }
+  else {
+    filteredData=allData.filter(e=>{
+      if(currentTab==='logins'){
+        return (e.username||'').toLowerCase().includes(q)||(e.party||'').toLowerCase().includes(q);
+      } else {
+        return (e.topic||'').toLowerCase().includes(q)||
+          (e.loggedInParties||[]).join(' ').toLowerCase().includes(q);
+      }
+    });
+  }
+  renderHeader();
+  renderRows(filteredData);
+}
+
+function onSearch(){ applyFilter(); }
+
+function switchTab(tab){
+  if(tab===currentTab) return;
+  currentTab=tab;
+  document.getElementById('tabLogins').classList.toggle('active',  tab==='logins');
+  document.getElementById('tabResults').classList.toggle('active', tab==='results');
+  document.getElementById('searchInput').value='';
+  refresh();
+}
+
+function setCount(n){
+  currentCount=n;
+  document.querySelectorAll('.count-btn').forEach(b=>{
+    b.classList.toggle('active', parseInt(b.dataset.n)===n);
+  });
+  refresh();
+}
+
+// DETAIL MODAL
+function showDetail(idx){
+  if(currentTab!=='results') return;
+  const e=filteredData[idx];
+  if(!e) return;
+
+  document.getElementById('modalTitle').textContent = 'Hlasovanie č. '+(e.votingCount??'?');
+  document.getElementById('modalTopic').textContent = e.topic&&e.topic!==''?e.topic:'(bez témy)';
+
+  const ok=e.approved;
+  document.getElementById('modalResultRow').innerHTML =
+    ok ? `<span class="badge badge-approved" style="font-size:13px">PRIJATÝ</span>`
+       : `<span class="badge badge-rejected" style="font-size:13px">ZAMIETNUTÝ</span>`;
+
+  document.getElementById('modalStats').innerHTML=`
+    <div class="stat-item"><span class="dot dot-for" style="background:var(--success)"></span> Za: <strong>${e.forVotes??0}</strong></div>
+    <div class="stat-item"><span class="dot dot-against" style="background:var(--danger)"></span> Proti: <strong>${e.againstVotes??0}</strong></div>
+    <div class="stat-item"><span class="dot" style="background:var(--warn)"></span> Zdržali sa: <strong>${e.abstainVotes??0}</strong></div>
+    <div class="stat-item"><span class="dot" style="background:var(--accent)"></span> Nehlasovali: <strong>${e.nonVotedCount??0}</strong></div>
+    <div class="stat-item" style="margin-left:auto;color:var(--sub);font-size:11px">${esc(e.timestamp||'')}</div>
+  `;
+
+  const breakdown=e.partyBreakdown||{};
+  const parties=Object.keys(breakdown).sort();
+  const list=document.getElementById('partyList');
+
+  if(!parties.length){
+    list.innerHTML=`<div style="text-align:center;padding:24px;color:var(--sub);font-family:var(--mono);font-size:12px">Žiadne dáta o stranách.</div>`;
+  } else {
+    list.innerHTML=parties.map((p,i)=>{
+      const vt=(breakdown[p].voteType||'Neprihlaseny').replace('Zdrzali sa','Zdrzal sa');
+      const cls={
+        'Za':'vote-Za','Proti':'vote-Proti','Zdrzal sa':'vote-Zdrzal',
+        'Nehlasoval':'vote-Nehlasoval','Neprihlaseny':'vote-Neprihlaseny'
+      }[vt]||'vote-Neprihlaseny';
+      return `<div class="party-row">
+        <span class="party-name">${esc(p)}</span>
+        <span class="vote-badge ${cls}">${esc(vt)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('modalOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeModal(e){
+  if(e.target===document.getElementById('modalOverlay')) closeModalDirect();
+}
+function closeModalDirect(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+// ESC key
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModalDirect(); });
+
+// TOAST
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+// INIT
+refresh();
+</script>
+</body>
+</html>
